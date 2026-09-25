@@ -59,9 +59,18 @@ if [ ! -f "$BIN" ]; then
 fi
 
 echo "▶ 2/2 打包组件包（--require-lgpl 强制 LGPL）"
+LICENSE_ARGS=(--license licenses/COPYING.LGPLv2.1)
+# 合规记录：源码地址 + 源码包校验和（构建阶段已写进 .build/SOURCE-SHA256.txt）
+SOURCE_URL="${FFMPEG_SRC_URL:-https://ffmpeg.org/releases/ffmpeg-${VERSION}.tar.xz}"
+SOURCE_SHA="$(awk '{print $1}' "$ROOT/.build/SOURCE-SHA256.txt" 2>/dev/null || true)"
+SOURCE_ARGS=(--source-url "$SOURCE_URL")
+[ -n "$SOURCE_SHA" ] && SOURCE_ARGS+=(--source-sha256 "$SOURCE_SHA")
+# FFmpeg 自己的 LICENSE.md 说明"哪些部分 LGPL、哪些是可选 GPL"——随组件分发最能防止误读
+[ -f licenses/LICENSE.md ] && LICENSE_ARGS+=(--license licenses/LICENSE.md)
 node scripts/build-ffmpeg-plugin.mjs \
   --bin "$BIN" \
-  --license licenses/COPYING.LGPLv2.1 \
+  "${LICENSE_ARGS[@]}" \
+  "${SOURCE_ARGS[@]}" \
   --version "$VERSION" \
   --out dist-plugins \
   --require-lgpl

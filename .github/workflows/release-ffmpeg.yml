@@ -33,10 +33,17 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-14          # Apple Silicon
+          # ⚠️ runner 标签会被 GitHub 退役：macos-13(Intel) 已于 2025 年下线，
+          #    继续用它只会「Waiting for a runner to pick up this job...」永久排队。
+          #    当前可用（2026-09）：
+          #      macos-15 / macos-14        → arm64（Apple Silicon，标准 runner）
+          #      macos-15-intel             → x64（Intel，标准 runner）★ 原 macos-13 的替代
+          #      macos-14-large / -xlarge   → larger runner（计费不同）
+          #    标签一旦再变，改下面两行即可（作业名里带 platform/arch，产物文件名不受影响）。
+          - os: macos-15          # arm64（Apple Silicon）
             platform: darwin
             arch: arm64
-          - os: macos-13          # Intel
+          - os: macos-15-intel    # x64（Intel）—— 原 macos-13，2025 年退役后迁移到此标签
             platform: darwin
             arch: x64
           - os: ubuntu-22.04
@@ -46,12 +53,20 @@ jobs:
             platform: win32
             arch: x64
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
     defaults:
       run:
-        # Windows 上让所有 run 步骤默认走 MSYS2 的 MINGW64 shell（与 macOS/Linux 同一套脚本）
+        # Windows 上让 run 步骤默认走 MSYS2 的 MINGW64 shell（为了让构建脚本与 macOS/Linux 完全一致）
+        # ⚠️ 代价：MSYS2 shell **看不到 Windows PATH**（node/npm/pwsh 等不可用）
+        #    → 需要 node 的步骤必须显式写 `shell: bash` 或 `shell: pwsh`
         shell: ${{ matrix.os == 'windows-latest' && 'msys2 {0}' || 'bash' }}
     steps:
       - uses: actions/checkout@v4
+
+      # Node 提前装好：后面的"脚本体检"与"打包"都要用 node
+      # （Windows 上注意：MSYS2 shell 看不到 Windows PATH，所以这两步都显式指定 bash/pwsh）
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
 
       # ---------- 工具链 ----------
       - name: 工具链（Windows / MSYS2 MINGW64）
@@ -67,6 +82,7 @@ jobs:
             diffutils
             curl
             tar
+            xz
             mingw-w64-x86_64-toolchain
       - name: 硬件编码头文件（Windows 可选：NVENC / QSV / AMF）
         if: matrix.os == 'windows-latest'
@@ -74,7 +90,7 @@ jobs:
         run: pacman -S --needed --noconfirm mingw-w64-x86_64-ffnvcodec-headers mingw-w64-x86_64-onevpl mingw-w64-x86_64-amf-headers
 
       - name: 依赖（macOS）
-        if: matrix.os == 'macos-14' || matrix.os == 'macos-13'
+        if: startsWith(matrix.os, 'macos-')
         run: brew install nasm pkg-config
       - name: 依赖（Linux）
         if: matrix.os == 'ubuntu-22.04'
@@ -91,7 +107,12 @@ jobs:
           fi
 
       # ---------- 脚本体检（防 "$VAR+中文" 之类的 UTF-8 locale 坑） ----------
+      # ⚠️ 必须显式 shell：
+      #   本 job 的 defaults 在 Windows 上把 run 默认交给 MSYS2（msys2 {0}），
+      #   而 MSYS2 shell 默认 **不继承 Windows PATH**（setup-msys2 的 path-type=minimal），
+      #   于是 actions/setup-node 装的 node 在 MSYS2 里 `command not found`（exit 127）。
       - name: 脚本体检
+        shell: bash
         run: node scripts/check-shell-expansions.mjs
 
       # ---------- 自建（三平台同一脚本） ----------
@@ -101,9 +122,6 @@ jobs:
         run: bash scripts/build-lgpl-ffmpeg.sh "${{ steps.meta.outputs.version }}"
 
       # ---------- 打包（Windows 用系统 node，不依赖 MSYS2） ----------
-      - uses: actions/setup-node@v4
-        if: matrix.os != 'windows-latest'
-        with: { node-version: '20' }
       - name: 打包组件（macOS / Linux）
         if: matrix.os != 'windows-latest'
         run: |
@@ -135,6 +153,7 @@ jobs:
   release:
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

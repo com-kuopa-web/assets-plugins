@@ -1,15 +1,28 @@
 # licenses/
 
-许可证原文（LGPL 义务之一：**必须随组件包分发**）。
+许可证原文。**构建脚本会自动从 FFmpeg 源码树把这些文件复制过来**（`build-lgpl-ffmpeg.sh`），
+再由 `build-ffmpeg-plugin.mjs --license …` 决定哪些进组件包。
 
-这些文件**不需要手工维护**：`scripts/build-lgpl-ffmpeg.sh` 会在解压官方源码后，
-把 FFmpeg 源码树里的 `COPYING.LGPLv2.1`（LGPL 构建）或 `COPYING.GPLv3`（若改用 GPL 构建）复制到这里，
-随后 `scripts/build-ffmpeg-plugin.mjs --license licenses/COPYING.LGPLv2.1` 会把它打进组件包。
+## 哪份适用于我们的组件？
 
-若源码树里没有该文件，可从下列地址取一份（与 FFmpeg 自带内容一致）：
+| 文件 | 是否适用本组件 | 说明 |
+|---|---|---|
+| `COPYING.LGPLv2.1` | ✅ **适用（治理许可证）** | 我们的 configure 是 `--disable-gpl --disable-nonfree`，产物为 **LGPL-2.1-or-later** |
+| `LICENSE.md` | ✅ 适用（**范围说明**） | FFmpeg 官方文档：哪些文件 LGPL、哪些是"可选 GPL 部分"、启用 `--enable-gpl` 后整体变 GPL |
+| `COPYING.LGPLv3` | ⚠️ 仅当启用 `--enable-version3` 才相关 | 我们没启用；"LGPL v2.1 or later" 里的 "or later" 是给下游的选择权 |
+| `COPYING.GPLv3` | ❌ **不适用** | GPL 部分未启用；且 FFmpeg 的 GPL 部分用的是 GPLv2+（其 `LICENSE.md` 引用 `COPYING.GPLv2`） |
 
-- LGPL 2.1：https://www.gnu.org/licenses/old-licenses/lgpl-2.1.txt
-- GPL 3.0：https://www.gnu.org/licenses/gpl-3.0.txt
+> **注意**：多放一份许可文本本身不违法，但会让人误以为"这个二进制是 GPL"。
+> 所以**组件包只打 LGPLv2.1 + LICENSE.md**（见 `scripts/build-local.sh`），
+> 仓库里保留全部原文只是"源码树原料"，不是"声明"。
 
-> 合规要点见主仓库 `docs/notes/媒体播放/FFmpeg接入与许可证.md`：
-> 附许可证原文 + 提供对应源码获取方式 + 允许替换该组件（独立可执行文件天然满足）。
+## 合规三件套（随组件分发）
+
+| 材料 | 作用 |
+|---|---|
+| `licenses/COPYING.LGPLv2.1` | 许可证原文 |
+| `licenses/LICENSE.md` | 许可证**范围**说明（防止误读） |
+| `THIRD-PARTY-NOTICES.md`（打包时生成） | 版本 / configure 行 / 源码获取方式 / 如何替换 |
+| `build-info.json`（打包时生成） | 上述事实的**机器可验证证据**（含源码包 sha256） |
+
+义务清单与背景：`web/notes/许可证/` 与 `AssetsHelper/docs/notes/媒体播放/FFmpeg接入与许可证.md`。

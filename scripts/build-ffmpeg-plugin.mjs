@@ -32,23 +32,27 @@ import { basename, dirname, join, resolve } from 'node:path'
 function parseArgs(argv) {
   const out = {
     bin: null,
-    license: null,
+    licenses: [],
     out: 'dist-plugins',
     version: null,
     id: 'official.ffmpeg',
     name: 'FFmpeg 组件（第三方）',
     author: 'FFmpeg project',
+    sourceUrl: null,
+    sourceSha256: null,
     requireLgpl: false,
   }
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
     if (a === '--bin') out.bin = argv[++i]
-    else if (a === '--license') out.license = argv[++i]
+    else if (a === '--license') out.licenses.push(argv[++i])
     else if (a === '--out') out.out = argv[++i]
     else if (a === '--version') out.version = argv[++i]
     else if (a === '--id') out.id = argv[++i]
     else if (a === '--name') out.name = argv[++i]
     else if (a === '--author') out.author = argv[++i]
+    else if (a === '--source-url') out.sourceUrl = argv[++i]
+    else if (a === '--source-sha256') out.sourceSha256 = argv[++i]
     else if (a === '--require-lgpl') out.requireLgpl = true
     else if (a === '-h' || a === '--help') out.help = true
     else {
@@ -142,10 +146,10 @@ const destBin = join(pkgDir, 'bin', exe)
 copyFileSync(binPath, destBin)
 if (process.platform !== 'win32') execFileSync('chmod', ['755', destBin])
 
-/** 许可证文件：显式指定 > 二进制同目录里的 COPYING/LICENSE/NOTICE */
+/** 许可证文件：显式指定（可多个）> 二进制同目录里的 COPYING/LICENSE/NOTICE */
 const licenseFiles = []
-if (args.license) {
-  licenseFiles.push({ name: basename(args.license), path: resolve(args.license) })
+if (args.licenses.length) {
+  for (const l of args.licenses) licenseFiles.push({ name: basename(l), path: resolve(l) })
 } else {
   for (const f of readdirSync(dirname(binPath))) {
     if (/^(copying|license|notice)/i.test(f) && statSync(join(dirname(binPath), f)).isFile()) {
@@ -163,7 +167,7 @@ if (licenseFiles.length === 0) {
       license === 'GPL'
         ? 'GPL 构建必须提供许可证原文（COPYING.GPLv3）+ 对应源码获取方式。'
         : 'LGPL 构建必须提供 COPYING.LGPLv2.1（或 v3）+ 对应源码获取方式。',
-      '补齐后重新构建：node scripts/build-ffmpeg-plugin.mjs --bin … --license /path/to/COPYING…',
+      '补齐后重新构建：node scripts/build-ffmpeg-plugin.mjs --bin … --license /path/to/COPYING.LGPLv2.1 [--license …/LICENSE.md]',
       '',
     ].join('\n'),
     'utf8',
@@ -197,7 +201,22 @@ writeFileSync(
 
 writeFileSync(
   join(pkgDir, 'build-info.json'),
-  JSON.stringify({ id: args.id, version, license, configuration, sha256, builtAt: new Date().toISOString(), ffmpegVersionOutput: versionOut }, null, 2) + '\n',
+  JSON.stringify(
+    {
+      id: args.id,
+      version,
+      license,
+      configuration,
+      sha256,
+      ...(args.sourceUrl ? { sourceUrl: args.sourceUrl } : {}),
+      ...(args.sourceSha256 ? { sourceSha256: args.sourceSha256 } : {}),
+      builtAt: new Date().toISOString(),
+      builtFromBinary: binPath,
+      ffmpegVersionOutput: versionOut,
+    },
+    null,
+    2,
+  ) + '\n',
   'utf8',
 )
 
@@ -210,19 +229,24 @@ writeFileSync(
 | 组件 | FFmpeg（\`ffmpeg\` 可执行文件） |
 | 版本 | ${version} |
 | 构建许可证 | **${license}** |
-| 来源 | ${binPath} |
+| 许可证治理 | ${license === 'LGPL' ? 'LGPL-2.1-or-later' : license} |
+| 对应源码 | ${args.sourceUrl ?? '见下方"对应源码"'} |${args.sourceSha256 ? `\n| 源码包 SHA-256 | \`${args.sourceSha256}\` |` : ''}
+| 构建机器上的二进制路径 | \`${binPath}\` |
 | SHA-256 | \`${sha256}\` |
 
-## 许可证原文
+## 许可证原文与适用范围
 
 见 \`licenses/\` 目录（${licenseFiles.map((l) => l.name).join('、') || '⚠️ 缺失，见 licenses/MISSING.txt'}）。
 
+**适用范围**：本组件按 **${license}** 分发，判定依据是 \`build-info.json\` 里记录的 configure 行
+（含 \`--disable-gpl --disable-nonfree\`）。FFmpeg 中受 GPL 覆盖的**可选部分**（libpostproc、
+部分 x86 汇编优化与滤镜等）在本构建中**未启用**；若 \`licenses/\` 内另含其它许可文本（如 GPLv3），
+那是 FFmpeg 源码树随附的原文，**不适用于本二进制**（FFmpeg 官方的许可证分布说明见其 \`LICENSE.md\`）。
+
 ## 对应源码
 
-${version}
-
-- 官方源码：https://ffmpeg.org/download.html （按上面版本号取对应 tag，如 \`n${version.replace(/\./g, '.')}\`）
-- 构建配置（configure 行）：
+- 源码包：${args.sourceUrl ?? `https://ffmpeg.org/releases/ffmpeg-${version}.tar.xz`}
+${args.sourceSha256 ? `- 源码包 SHA-256：\`${args.sourceSha256}\`\n` : ''}- 构建配置（configure 行）：
 
 \`\`\`
 ${configuration || '(未记录)'}
