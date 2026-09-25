@@ -1,5 +1,58 @@
 {
   "schema": 1,
-  "updatedAt": "",
-  "plugins": []
+  "updatedAt": "2026-09-25T09:16:56.722Z",
+  "plugins": [
+    {
+      "id": "official.ffmpeg",
+      "name": "FFmpeg 组件（第三方）",
+      "version": "7.1.5",
+      "description": "FFmpeg 7.1.5（LGPL 构建）—— 转码 / 截帧 / 探测",
+      "license": "LGPL-2.1-or-later",
+      "platform": "darwin",
+      "arch": "arm64",
+      "size": 9971053,
+      "sha256": "60929c6098f62b7214391aa4a5652750a73d493f2f079b9a24294eb3fc86878c",
+      "downloadUrl": "https://github.com/com-kuopa-web/assets-plugins/releases/download/ffmpeg-7.1.5/official.ffmpeg-7.1.5-darwin-arm64.zip",
+      "mirrors": []
+    },
+    {
+      "id": "official.ffmpeg",
+      "name": "FFmpeg 组件（第三方）",
+      "version": "7.1.5",
+      "description": "FFmpeg 7.1.5（LGPL 构建）—— 转码 / 截帧 / 探测",
+      "license": "LGPL-2.1-or-later",
+      "platform": "darwin",
+      "arch": "x64",
+      "size": 10911663,
+      "sha256": "e377fc12ad2ef0b37da48910fdb1017c8bea4d6c95bd50dc4e83d8a322853355",
+      "downloadUrl": "https://github.com/com-kuopa-web/assets-plugins/releases/download/ffmpeg-7.1.5/official.ffmpeg-7.1.5-darwin-x64.zip",
+      "mirrors": []
+    },
+    {
+      "id": "official.ffmpeg",
+      "name": "FFmpeg 组件（第三方）",
+      "version": "7.1.5",
+      "description": "FFmpeg 7.1.5（LGPL 构建）—— 转码 / 截帧 / 探测",
+      "license": "LGPL-2.1-or-later",
+      "platform": "linux",
+      "arch": "x64",
+      "size": 10052671,
+      "sha256": "a0a9ca7f4f7d9925e0d4c3d14e8b57c587ed40b02cf171eadabb905e34c2bfba",
+      "downloadUrl": "https://github.com/com-kuopa-web/assets-plugins/releases/download/ffmpeg-7.1.5/official.ffmpeg-7.1.5-linux-x64.zip",
+      "mirrors": []
+    },
+    {
+      "id": "official.ffmpeg",
+      "name": "FFmpeg 组件（第三方）",
+      "version": "7.1.5",
+      "description": "FFmpeg 7.1.5（LGPL 构建）—— 转码 / 截帧 / 探测",
+      "license": "LGPL-2.1-or-later",
+      "platform": "win32",
+      "arch": "x64",
+      "size": 11274873,
+      "sha256": "889f094c208210056cb3bc86d473310fc2d6a61adb35dace3aed3785e0c6be29",
+      "downloadUrl": "https://github.com/com-kuopa-web/assets-plugins/releases/download/ffmpeg-7.1.5/official.ffmpeg-7.1.5-win32-x64.zip",
+      "mirrors": []
+    }
+  ]
 }
