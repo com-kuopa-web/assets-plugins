@@ -157,7 +157,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      # ⚠️ 必须显式 checkout 到分支：tag 触发的 run 默认是 **detached HEAD**，
+      #    末尾的 `git push`（提交更新后的清单）会直接失败：fatal: You are not currently on a branch.
+      #    清单文件住在 main 上，所以这里固定拉 main。
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
       - uses: actions/setup-node@v4
         with: { node-version: '20' }
       - uses: actions/download-artifact@v4
