@@ -1,60 +1,159 @@
 # assets-plugins —— AssetsHelper 官方资产组件（插件）分发仓库
 
-本仓库是 **公开的组件分发源**：App（AssetsHelper）在「设置 → 播放 → FFmpeg → 组件源」里指向本仓库的
-`plugin-catalog.json`，即可按需下载/校验/安装组件。
+本仓库是 **公开的组件分发源**：App 在「设置 → 播放 → FFmpeg → 组件源」里指向本仓库的
+`plugin-catalog.json`（留空即用内置官方源），即可按需下载 / 校验 / 安装组件。
 
 > 仓库只做两件事：
-> 1. **放清单** `plugin-catalog.json`（几 KB，告诉 App「有哪些组件、在哪下、sha256 是多少、镜像有哪些」）；
-> 2. **放 CI** 与构建脚本（把 FFmpeg 之类的第三方二进制打包成合规组件包，作为 **Release 资源**上传）。
+> 1. **放清单** `plugin-catalog.json`（几 KB：有哪些组件、在哪下、sha256、镜像）；
+> 2. **放 CI 与构建脚本**（从官方源码自建 FFmpeg → 打包成合规组件包 → 作为 **Release 资源**上传）。
 >
-> ⚠️ **二进制不进仓库**：40~80MB 的文件会让 clone 变慢、仓库膨胀；Release 资源有独立 CDN、单文件可到 2GB。
-> 且 GitHub 限制单个仓库 2GB、raw 有速率限制。
+> ⚠️ **二进制不进仓库**：40~80MB 的文件会让 clone 变慢、仓库膨胀（GitHub 单仓库建议 ≤2GB）；
+> Release 资源有独立 CDN、单文件可到 2GB。**仓库管清单，Release 管大文件。**
 
-## 目录
+---
+
+## 一、构建（本地，一条命令）
+
+### 0. 一次性准备依赖
+
+构建脚本默认是 **最小构建**：只用 FFmpeg 自带编解码器 + 平台硬件编码，**不链接任何外部库**
+（截帧/探测靠解码；转码优先硬件编码；音轨走 `-c:a copy`）。依赖因此很少：
+
+| 平台 | 依赖 |
+|---|---|
+| **macOS** | `xcode-select --install` + `brew install nasm pkg-config` |
+| **Ubuntu/Debian** | `sudo apt-get install -y nasm pkg-config` |
+| **Windows** | 装 **MSYS2**，在 “MSYS2 MINGW64” 终端里：`pacman -S --needed make nasm pkgconf diffutils curl tar mingw-w64-x86_64-toolchain` |
+
+> 需要 `libmp3lame/libopus/libass/freetype`（例如字幕烧录、mp3 编码）时再加 `FULL=1`，
+> 并安装对应开发包：macOS `brew install lame opus libass freetype`、
+> Ubuntu `libmp3lame-dev libopus-dev libass-dev libfreetype6-dev`、
+> MSYS2 `mingw-w64-x86_64-lame mingw-w64-x86_64-opus mingw-w64-x86_64-libass mingw-w64-x86_64-freetype`。
+
+### 1. 构建 + 打包（推荐）
+
+```bash
+# macOS / Linux（bash）
+bash scripts/build-local.sh              # 默认版本 7.1.5
+bash scripts/build-local.sh 8.1.3        # 指定版本
+FULL=1 bash scripts/build-local.sh       # 额外链接 lame/opus/ass/freetype
+
+# Windows（MSYS2 MINGW64 终端里，同一套脚本）
+bash scripts/build-local.sh
+```
+
+它做三件事：**① 下载官方源码 →（PGP 验签 + 记录 sha256）→ 自建 LGPL ffmpeg；
+② 打包成组件包；③ 打印"怎么本地验证 / 怎么发布"**。
+
+- 耗时：首次约 **10~25 分钟**（编译为主）；第二次复用 `.build/` 会快很多。
+- 产物：
+  ```
+  .build/out/bin/ffmpeg[.exe]                                  # 二进制
+  .build/SOURCE-SHA256.txt                                     # 源码包校验和（合规记录）
+  licenses/COPYING.LGPLv2.1                                    # 从官方源码树复制（随组件包分发）
+  dist-plugins/official.ffmpeg-<ver>-<platform>-<arch>.zip     # ★ 组件包
+  dist-plugins/official.ffmpeg-<ver>/                          #   解压形态（含 manifest/licenses/NOTICES/build-info）
+  ```
+
+### 2. 分步（想看清每一步 / 只重打包）
+
+```bash
+# ① 只建 ffmpeg
+bash scripts/build-lgpl-ffmpeg.sh 7.1.5
+
+# ② 只打包（二进制已存在）
+bash scripts/build-local.sh --skip-build 7.1.5
+#   等价于：
+node scripts/build-ffmpeg-plugin.mjs \
+  --bin .build/out/bin/ffmpeg \
+  --license licenses/COPYING.LGPLv2.1 \
+  --version 7.1.5 --out dist-plugins --require-lgpl
+
+# ③ 只更新清单（不发布）
+node scripts/update-catalog.mjs --dir dist-plugins --catalog plugin-catalog.json \
+  --repo <owner>/assets-plugins --tag ffmpeg-7.1.5
+```
+
+要点：
+- `--require-lgpl` 是**硬门槛**：检测到 GPL / `--enable-nonfree` 构建直接失败，防止把不合规二进制发出去；
+- 构建脚本结尾还会再查一次 `ffmpeg -version` 的 configure 行，确认没有 `--enable-gpl/--enable-nonfree`；
+- 想锁定源码校验和：`FFMPEG_SRC_SHA256=<官方 tar.xz 的 sha256> bash scripts/build-lgpl-ffmpeg.sh 7.1.5`。
+
+### 3. 本地验证（不用发布）
+
+| 方式 | 做法 |
+|---|---|
+| **装进 App** | 打开 AssetsHelper → 设置 → 播放 → FFmpeg → 「导入组件包…」→ 选中**解压后的目录** `dist-plugins/official.ffmpeg-<ver>`（也可以选二进制文件本身） |
+| 手动放 | 把 `official.ffmpeg-<ver>/` 拷到 `{userData}/plugins/official.ffmpeg/<ver>/`（macOS: `~/Library/Application Support/AssetsHelper/plugins/`；Windows: `%APPDATA%\AssetsHelper\plugins\`） |
+| 只验二进制 | `.build/out/bin/ffmpeg -hide_banner -version` / `-encoders | grep -E "libx264|h264_videotoolbox|h264_nvenc"` |
+
+装好后：设置里的 FFmpeg 行应显示「来源：组件包 · 版本 · 许可证 · 编码器」；视频转码/截帧即可用。
+
+### 4. 发布（CI 出全平台包）
+
+```bash
+git add -A && git commit -m "feat: ffmpeg 组件构建" && git push
+git tag ffmpeg-7.1.5 && git push origin ffmpeg-7.1.5
+```
+
+CI（`.github/workflows/release-ffmpeg.yml`）会在 4 个 runner 上各自**自建**（macOS arm64/x64、Linux x64、Windows x64/MSYS2），
+打包后上传 Release，并自动更新并提交 `plugin-catalog.json`。
+
+也可以**手动触发**：Actions → Release FFmpeg component → Run workflow（填版本号，可选 FULL）。
+
+### 5. 常见问题
+
+| 现象 | 原因 / 处理 |
+|---|---|
+| **`line N: VERSION?: unbound variable`**（变量名后面跟了个乱码字符） | **`$VAR` 紧跟中文/全角字符**的 bash 解析坑：在 UTF-8 locale 下 bash 会把后面的全角字符吃进变量名（`LC_ALL=C` 下却正常，所以"我这儿能跑、别人一跑就挂"）。修法：写成 `${VAR}` + 空格。仓库已提供体检脚本：`node scripts/check-shell-expansions.mjs`（`build-local.sh` 开头与 CI 都会先跑它） |
+| `set: -\r: invalid option` / `bash: $'\r': command not found` | **CRLF 检出**（Windows 常见）：仓库已加 `.gitattributes`（`*.sh text eol=lf`）；历史文件可 `git add --renormalize .` 或手动 `sed -i 's/\r$//' scripts/*.sh` |
+| **下载中断（`curl: (56) Recv failure: Connection reset by peer`）** | 官方源在国内可能不稳。脚本已支持**断点续传**：**原样重跑同一命令**即可从断点继续；留下的 `*.tar.xz.part` 会自动接上。若长期不通，换源：`FFMPEG_SRC_URL=https://github.com/FFmpeg/FFmpeg/archive/refs/tags/n7.1.5.tar.gz bash scripts/build-lgpl-ffmpeg.sh 7.1.5` |
+| **上次下载留下半截包** → 解压报 `Lzma library error` / `tar: Error exit delayed` | 脚本现在会**自动识别**（用 `tar -tf` 校验）→ 删除坏包并重下；解压中断留下的半个源码目录也会被识别（以 `configure` 是否存在为准）并清理重解压。想彻底重来：`bash scripts/build-local.sh --clean 7.1.5` |
+| **`make: ffbuild/common.mak: No such file or directory`**（或 `fftools/Makefile`、`tests/*.mak` 一族） | 上一次**解压中断**留下的"半个源码目录"，而里面恰好已有 `configure` —— 旧版脚本只看这一个文件就误判为完整。现在改为：**逐个检查关键文件 + 解压到临时目录再原子改名 + 写完整性标记 `.unpacked-<版本>`**，检测到不完整会自动清理重解压（无需手动干预；想彻底重来用 `--clean`） |
+| `WARNING: pkg-config not found, library detection may fail.` | **最小构建下可忽略**：我们不链接任何外部库（只用自带的解码器 + 平台硬件编码）。装了 `pkg-config` 只是让检测更完整 |
+| `nasm not found` | 缺汇编器：macOS `brew install nasm`；MSYS2 `pacman -S nasm` |
+| `configure: error: pkg-config not found` | 装 `pkg-config` / MSYS2 里是 `pkgconf` |
+| 构建完发现 configure 行里有 `--enable-gpl` | 说明用了外部库的 GPL 版本（如 full 模式链了 x264）—— **不要分发**，检查 `FULL` 依赖 |
+| Windows 产物报缺 DLL | 脚本已加 `--extra-ldexeflags=-static --pkg-config-flags=--static`；若仍缺，确认用的是 MINGW64 终端（不是 MSYS 终端） |
+| macOS 上没有硬件编码器 | 确认 configure 行含 `--enable-videotoolbox`（脚本在 macOS 自动加） |
+| 没有软件 H.264 编码（提示无法转码） | LGPL 构建**本来就没有 libx264**：靠 VideoToolbox/NVENC/QSV/AMF 硬件编码，或 `-c copy` 直通；无硬件时只能不转码 |
+| CI 里 `zip`/`Compress-Archive` 失败 | 打包脚本会自动尝试 `zip` → PowerShell，两者都没有时只产出目录（手动压缩即可） |
+
+---
+
+## 二、目录
 
 ```
 assets-plugins/
 ├── plugin-catalog.json                     # ★ App 拉取的清单（CI 自动更新）
-├── .github/workflows/release-ffmpeg.yml    # 打 tag 即发布：构建 → 打包 → 上传 Release → 更新清单
+├── .github/workflows/release-ffmpeg.yml    # 打 tag / 手动触发即发布（三平台自建）
 ├── scripts/
-│   ├── build-ffmpeg-plugin.mjs             # 组件打包器（从主仓库 AssetsHelper 同步）
-│   ├── build-lgpl-ffmpeg.sh                # 从 ffmpeg.org **官方源码** 自建 LGPL 版并记录校验和
+│   ├── build-lgpl-ffmpeg.sh                # 官方源码 → 验签/记 sha256 → 自建 LGPL（macOS/Linux/MSYS2 通用）
+│   ├── build-local.sh                      # ★ 本机一条命令：构建 + 打包 + 打印验证/发布方式
+│   ├── build-ffmpeg-plugin.mjs             # 组件打包器（从主仓库 AssetsHelper 同步，含 --require-lgpl）
+│   ├── check-shell-expansions.mjs          # shell 体检：禁止 "$VAR 紧跟中文"（UTF-8 locale 坑）
 │   └── update-catalog.mjs                  # 用产物自动更新清单（sha256/size/downloadUrl）
-└── licenses/                               # 许可证原文（构建时从 FFmpeg 源码树复制进组件包）
+└── licenses/                               # 许可证原文（构建时从官方源码树复制，随组件包分发）
 ```
 
-## 为什么是"从源码自建"
+## 三、为什么"从源码自建"
 
-ffmpeg.org 的官方下载页写明：**“FFmpeg only provides source code.”**
-它给出的预编译产物链接（gyan.dev / BtbN / evermeet.cx）都是**第三方**，且大多是 `--enable-gpl` 甚至 `--enable-nonfree` 构建
-（后者按官方说明**不可再分发**）。
+ffmpeg.org 官方下载页写明：**“FFmpeg only provides source code.”**
+页面给出的预编译链接（gyan.dev / BtbN / evermeet.cx / Homebrew）都是**第三方**，且大多是 `--enable-gpl`，
+个别甚至是 `--enable-nonfree`（按官方说明**不可再分发**）—— 这正是本项目要避开的风险。
 
 自建的好处：
-- 只用官方源码 + 我们自己的 configure 行 → **"对应源码"这条义务最好满足**（就是 ffmpeg.org 的发布包，签名可验证）；
-- 可以明确禁用 GPL/nonfree，产物是**LGPL**，义务最轻；
-- macOS 本来也几乎没有现成的 LGPL 预编译产物。
 
-代价：LGPL 构建**没有 libx264**（软件 H.264 编码），只能硬件编码（VideoToolbox / NVENC / QSV / AMF）或 `-c copy` 直通。
+- 只依赖官方源码 + 我们自己的 configure 行 → **"对应源码"义务最清晰**（版本 + 源码 sha256 + PGP 签名都可存档）；
+- 明确 `--disable-gpl --disable-nonfree` → 产物是 **LGPL**，义务最轻；
+- macOS 上本来也几乎没有现成的 LGPL 预编译产物。
 
-## 发布一个版本
+代价：LGPL 构建没有 `libx264`，只能硬件编码或 `-c copy`。
 
-```bash
-git tag ffmpeg-7.1.5 && git push origin ffmpeg-7.1.5
-```
-
-CI 会：下载官方源码（校验 PGP 签名 / 记录 sha256）→ 自建 LGPL ffmpeg → 打包（`--require-lgpl` 强制）
-→ 上传各平台 zip 到 Release → 更新并提交 `plugin-catalog.json`。
-
-## App 端怎么用
-
-设置 → 播放 → FFmpeg：
-- 「组件源」留空 = 用内置官方源（指向本仓库）；
-- 也可填镜像/内网地址（网络受限时换源，无需重新发版）；
-- 首次启动会**后台自动扫描**本机已有的 ffmpeg，扫描不到时才需要下载或导入组件包。
-
-## 许可证
+## 四、许可证
 
 - 本仓库的**脚本与清单**：随主项目授权；
-- Release 中的 **FFmpeg 二进制**：由 FFmpeg 项目提供，按对应构建的许可证（本仓库默认 **LGPL-2.1-or-later**）分发；
-  每个组件包内带 `licenses/`（来自 FFmpeg 源码树）与 `THIRD-PARTY-NOTICES.md`（版本、configure 行、源码获取方式、替换方法）。
-- 源码获取：`https://ffmpeg.org/releases/ffmpeg-<version>.tar.xz`（清单/组件包里的 `build-info.json` 记录了版本、configure 行与源码包 sha256）。
+- Release 中的 **FFmpeg 二进制**：由 FFmpeg 项目提供，按对应构建的许可证（默认 **LGPL-2.1-or-later**）分发；
+  每个组件包内含 `licenses/`（来自官方源码树）与 `THIRD-PARTY-NOTICES.md`
+  （版本、configure 行、源码获取方式、如何替换）。
+- 源码获取：`https://ffmpeg.org/releases/ffmpeg-<version>.tar.xz`。

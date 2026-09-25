@@ -108,10 +108,15 @@ if (license === 'nonfree') {
   )
   process.exit(1)
 }
-if (license === 'GPL' && args.requireLgpl) {
+if (args.requireLgpl && license !== 'LGPL') {
   console.error(
-    '\n✗ --require-lgpl：这份是 GPL 构建，CI 要求必须用 LGPL。' +
-      '\n  换用 LGPL 构建（scripts/build-lgpl-ffmpeg.sh），或去掉 --require-lgpl 自行承担 GPL 义务。',
+    `\n✗ --require-lgpl：许可证必须能确认为 LGPL，实际判定为 ${license}。` +
+      (license === 'GPL'
+        ? '\n  这份是 GPL 构建：换用 LGPL 构建（scripts/build-lgpl-ffmpeg.sh），或去掉 --require-lgpl 自行承担 GPL 义务。'
+        : license === 'nonfree'
+          ? '\n  这份含 --enable-nonfree，**不可再分发** —— 不能用它做分发包。'
+          : '\n  无法从 `ffmpeg -version` 的 configuration 行判定许可证（可能是探测失败或构建信息被裁剪）：' +
+            '\n  请确认这份二进制能被正常执行，并输出包含 configuration 行的版本信息。'),
   )
   process.exit(1)
 }
