@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// ⚠️ 本文件是从主仓库 `AssetsHelper/scripts/build-ffmpeg-plugin.mjs` 复制来的（vendor）。要改就改主副本再复制回来，避免两边漂移。
 /**
  * 构建 `official.ffmpeg` 组件包（F2）
  *
@@ -27,6 +28,7 @@ import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync, rmSync } from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 /* ---------------- 参数 ---------------- */
 function parseArgs(argv) {
@@ -65,11 +67,13 @@ function parseArgs(argv) {
 
 const args = parseArgs(process.argv.slice(2))
 if (args.help || !args.bin) {
-  console.log(readFileSync(new URL(import.meta.url), 'utf8').split('*/')[0].replace(/^#!.*\n/, ''))
+  console.log(readFileSync(fileURLToPath(import.meta.url), 'utf8').split('*/')[0].replace(/^#!.*\n/, ''))
   process.exit(args.help ? 0 : 2)
 }
 
-const root = resolve(dirname(new URL(import.meta.url).pathname), '..')
+// ⚠️ 必须用 fileURLToPath：`new URL(import.meta.url).pathname` 在 Windows 上得到 `/D:/a/…`，
+//    再交给 path.resolve 会变成 `D:\D:\a\…`（ENOENT: mkdir 'D:\D:\a\…'）。
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const binPath = resolve(args.bin)
 if (!existsSync(binPath)) {
   console.error(`✗ 找不到：${binPath}`)

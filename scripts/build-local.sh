@@ -18,6 +18,10 @@ node scripts/check-shell-expansions.mjs >/dev/null || {
   echo "✗ shell 脚本体检未通过：执行 node scripts/check-shell-expansions.mjs 查看详情" >&2
   exit 1
 }
+node scripts/check-node-paths.mjs >/dev/null || {
+  echo "✗ Node 脚本体检未通过：执行 node scripts/check-node-paths.mjs 查看详情" >&2
+  exit 1
+}
 
 SKIP_BUILD=0
 CLEAN=0

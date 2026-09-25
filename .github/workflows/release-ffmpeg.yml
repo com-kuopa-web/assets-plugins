@@ -113,7 +113,9 @@ jobs:
       #   于是 actions/setup-node 装的 node 在 MSYS2 里 `command not found`（exit 127）。
       - name: 脚本体检
         shell: bash
-        run: node scripts/check-shell-expansions.mjs
+        run: |
+          node scripts/check-shell-expansions.mjs
+          node scripts/check-node-paths.mjs
 
       # ---------- 自建（三平台同一脚本） ----------
       - name: 自建 LGPL ffmpeg

@@ -116,6 +116,7 @@ CI（`.github/workflows/release-ffmpeg.yml`）会在 4 个 runner 上各自**自
 | **下载中断（`curl: (56) Recv failure: Connection reset by peer`）** | 官方源在国内可能不稳。脚本已支持**断点续传**：**原样重跑同一命令**即可从断点继续；留下的 `*.tar.xz.part` 会自动接上。若长期不通，换源：`FFMPEG_SRC_URL=https://github.com/FFmpeg/FFmpeg/archive/refs/tags/n7.1.5.tar.gz bash scripts/build-lgpl-ffmpeg.sh 7.1.5` |
 | **上次下载留下半截包** → 解压报 `Lzma library error` / `tar: Error exit delayed` | 脚本现在会**自动识别**（用 `tar -tf` 校验）→ 删除坏包并重下；解压中断留下的半个源码目录也会被识别（以 `configure` 是否存在为准）并清理重解压。想彻底重来：`bash scripts/build-local.sh --clean 7.1.5` |
 | **CI 一直「Waiting for a runner to pick up this job...」** | **runner 标签被 GitHub 退役了**（`macos-13` 于 2025 年下线）。排队阶段没有可配置超时，只能取消重跑，且**必须换标签**。当前可用：`macos-15`/`macos-14` = arm64、`macos-15-intel` = Intel x64、`ubuntu-*`、`windows-latest`。详见 `web/notes/ci/GitHub-Actions-runner标签与排队.md` |
+| **`ENOENT: no such file or directory, mkdir 'D:\D:\a\…'`** | **Windows 路径被拼成双盘符**：脚本里用了 `new URL(import.meta.url).pathname` —— 它返回**URL 语义**路径（`/D:/a/…`），再 `path.resolve` 会补上当前盘符 → `D:\D:\a\…`。macOS/Linux 上恰好正常，所以只在 Windows CI 暴露。改为 `path.dirname(fileURLToPath(import.meta.url))`；仓库已加体检 `node scripts/check-node-paths.mjs`（CI 与 `build-local.sh` 都会跑） |
 | **`Unknown option "--enable-qsv"`** | FFmpeg **没有** `--enable-qsv` 这个开关：QSV 走 `--enable-libvpl`（oneVPL）或 `--enable-libmfx`（旧 MediaSDK）。**pkg-config 包名 ≠ configure 开关名**，权威依据是 `./configure --help` 或源码里的 `xxx_deps=` 声明：<br>· NVENC → `--enable-nvenc`（探测 `ffnvcodec`）<br>· AMF → `--enable-amf`（**无 pkg-config**，只看 AMF 头文件）<br>· QSV → `--enable-libvpl` / `--enable-libmfx`（探测 `vpl`/`libvpl`）<br>· VAAPI → `--enable-vaapi`（探测 `libva`） |
 | **`node: command not found`（Windows job，exit 127）** | MSYS2 的 shell **默认不继承 Windows PATH**（`msys2/setup-msys2` 的 `path-type` 默认 `minimal`），所以 `actions/setup-node` 装的 `node` 在 MSYS2 里不可见。处理：**需要 node 的步骤显式写 `shell: bash` 或 `shell: pwsh`**（本仓库的"脚本体检"与"打包（Windows）"就是这么写的）；也可给 setup-msys2 加 `path-type: inherit`（会引入 Windows 的 tar/curl 与 MSYS2 的混用风险，不推荐） |
 | **`make: ffbuild/common.mak: No such file or directory`**（或 `fftools/Makefile`、`tests/*.mak` 一族） | 上一次**解压中断**留下的"半个源码目录"，而里面恰好已有 `configure` —— 旧版脚本只看这一个文件就误判为完整。现在改为：**逐个检查关键文件 + 解压到临时目录再原子改名 + 写完整性标记 `.unpacked-<版本>`**，检测到不完整会自动清理重解压（无需手动干预；想彻底重来用 `--clean`） |
@@ -139,8 +140,9 @@ assets-plugins/
 ├── scripts/
 │   ├── build-lgpl-ffmpeg.sh                # 官方源码 → 验签/记 sha256 → 自建 LGPL（macOS/Linux/MSYS2 通用）
 │   ├── build-local.sh                      # ★ 本机一条命令：构建 + 打包 + 打印验证/发布方式
-│   ├── build-ffmpeg-plugin.mjs             # 组件打包器（从主仓库 AssetsHelper 同步，含 --require-lgpl）
+│   ├── build-ffmpeg-plugin.mjs             # 组件打包器（vendor：以 AssetsHelper/scripts/ 为主副本，改那边再复制过来）
 │   ├── check-shell-expansions.mjs          # shell 体检：禁止 "$VAR 紧跟中文"（UTF-8 locale 坑）
+│   ├── check-node-paths.mjs                # Node 体检：禁止 new URL(import.meta.url).pathname（Windows 双盘符）
 │   └── update-catalog.mjs                  # 用产物自动更新清单（sha256/size/downloadUrl）
 └── licenses/                               # 许可证原文（构建时从官方源码树复制，随组件包分发）
 ```
