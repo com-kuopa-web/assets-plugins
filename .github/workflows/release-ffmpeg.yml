@@ -8,6 +8,42 @@
 # · 三个平台都 **自建**：macOS / Linux 在本机 shell，Windows 在 MSYS2（MINGW64）；
 # · 构建脚本默认是"最小构建"（不链接任何外部库，只用自带编解码器 + 硬件编码），依赖少、编译快；
 # · 打包一律 `--require-lgpl`：GPL / nonfree 构建会让 CI 直接失败，防止把不合规二进制发出去。
+#
+# ── action 版本策略（重要，别随手改）────────────────────────────────────────────
+# 背景：GitHub 会逐个淘汰 action 运行时的 Node 版本。**Node 20 已于 2026-09-23 从 runner 移除**，
+#       届时仍声明 node20 的 action 会被"强行用 node24 跑"，并在日志里报弃用警告：
+#         "The following actions target Node.js 20 but are being forced to run on Node.js 24: …"
+#       警告本身不致命，但一旦某个 action 与 node24 不兼容就会真炸 —— 所以要主动升级。
+#
+# 选版规则：**取"最低的那个已用 node24 的 major"**，而不是无脑升到最新。
+#   理由①：大版本跳得越多，未读的 breaking change 越多 —— 而 `action.yml` 只告诉你
+#          **运行时**和**输入/输出清单**，不告诉你行为变了什么（见下方 checkout 实例）。
+#   理由②：下载/上传制品两个 action 的 major **必须配对**（同一代制品 API），
+#          所以 download 被逼到 v7 时，upload 也一起上 v7。
+#
+# ⚠️ checkout 为什么只到 v5、不跟到 v7（已查 CHANGELOG，不是"懒得看"）：
+#   v5.0.0  = "Update actions checkout to use node 24"      → **纯运行时替换，行为与 v4 一致** ✅
+#   v6.0.0  = "Persist creds to a separate file"            → ⚠️ 改了**凭据持久化的存放位置**
+#   v7.0.0  = 默认拒绝为 pull_request_target/workflow_run 检出 fork PR → ⚠️ 安全加固（行为默认值反转）
+#   本 workflow 的 release job **末尾要 `git push` 回写清单**，正好依赖 checkout 持久化的凭据
+#   （也是当初 detached HEAD 会失败的原因）→ 动凭据机制的 major 不顺手跟，等有明确需要再单独验。
+#
+# 当前版本与自查结论（2026-09-25 逐个核对 `runs.using`）：
+#   actions/checkout@v5          → node24 ✓   （v5 是"最低 node24"；v6/v7 见上方⚠️）
+#   actions/setup-node@v5        → node24 ✓   （最新已到 v7）
+#   actions/upload-artifact@v7   → node24 ✓   （实测 v5/node20、v6/node24；因需与 download 同代，取 v7）
+#   actions/download-artifact@v7 → node24 ✓   （实测 v6 仍 node20，**没有**更低的 node24 可用）
+#   softprops/action-gh-release@v3 → node24 ✓ （v2 是上一代）
+#   msys2/setup-msys2@v2         → node24 ✓   （本来就已升级，无需动）
+#
+# 以后怎么查（一条命令看清某个 tag 声明的运行时）：
+#   curl -s https://raw.githubusercontent.com/<owner>/<repo>/<tag>/action.yml | grep -A2 '^runs:'
+# 想列出所有可用 major：
+#   curl -s https://api.github.com/repos/<owner>/<repo>/tags | grep -o '"name":"v[0-9]*"' | head
+# 想知道跨大版本到底改了什么（权威）：
+#   curl -s https://raw.githubusercontent.com/<owner>/<repo>/main/CHANGELOG.md | head -40
+# ⚠️ 别只升级日志里点名的那几个：没用到的 action 不会出现在警告里，
+#    另一个 job（这里是 release）里的 action 要自己看一遍。
 name: Release FFmpeg component
 
 on:
@@ -61,11 +97,15 @@ jobs:
         #    → 需要 node 的步骤必须显式写 `shell: bash` 或 `shell: pwsh`
         shell: ${{ matrix.os == 'windows-latest' && 'msys2 {0}' || 'bash' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # Node 提前装好：后面的"脚本体检"与"打包"都要用 node
       # （Windows 上注意：MSYS2 shell 看不到 Windows PATH，所以这两步都显式指定 bash/pwsh）
-      - uses: actions/setup-node@v4
+      #
+      # ⚠️ 这里有两个"Node 版本"，别混淆：
+      #   · `uses: ...@v5` 里的 v5 = **action 自身**跑在哪个 Node（v5 → node24，见下）
+      #   · `node-version: '20'` = 给**我们的构建脚本**装的 Node（与 action 运行时无关）
+      - uses: actions/setup-node@v5
         with: { node-version: '20' }
 
       # ---------- 工具链 ----------
@@ -146,7 +186,7 @@ jobs:
           Move-Item "dist-plugins/official.ffmpeg-$V.zip" "dist-plugins/official.ffmpeg-$V-${{ matrix.platform }}-${{ matrix.arch }}.zip" -Force
           Get-ChildItem dist-plugins/*.zip
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: pkg-${{ matrix.platform }}-${{ matrix.arch }}
           path: dist-plugins/*.zip
@@ -160,12 +200,12 @@ jobs:
       # ⚠️ 必须显式 checkout 到分支：tag 触发的 run 默认是 **detached HEAD**，
       #    末尾的 `git push`（提交更新后的清单）会直接失败：fatal: You are not currently on a branch.
       #    清单文件住在 main 上，所以这里固定拉 main。
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ github.event.repository.default_branch }}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with: { node-version: '20' }
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with: { path: dist-plugins, merge-multiple: true }
 
       - name: 解析版本号
@@ -181,7 +221,7 @@ jobs:
           fi
 
       - name: 创建 Release 并上传组件包
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.meta.outputs.tag }}
           name: FFmpeg component ${{ steps.meta.outputs.version }}
