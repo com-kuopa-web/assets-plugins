@@ -161,33 +161,74 @@ done
 
 # ---------- 3) configure ----------
 # 关键：--disable-gpl --disable-nonfree ⇒ 产物是 LGPL；绝不启用 libx264/libx265/fdk-aac 等。
+#
+# 硬件编码开关速查（依据 FFmpeg 7.x 自己的 configure 声明，别凭 pkg-config 名字猜！）：
+#   nvenc          开关 --enable-nvenc      依赖 pkg-config `ffnvcodec`（**只要头文件**，
+#                                            运行期 dlopen NVIDIA 驱动）→ 产物仍单文件
+#   amf            开关 --enable-amf        依赖 `amf_deps_any="libdl LoadLibrary"`（**无 pkg-config**，
+#                                            只要头文件，运行期 dlopen amfrt64.dll）→ 仍单文件
+#   videotoolbox   开关 --enable-videotoolbox  依赖 macOS 系统框架 → 仍单文件
+#   qsv            ❗**没有 `--enable-qsv`**：用 --enable-libvpl（oneVPL）或 --enable-libmfx（旧 MediaSDK）
+#                  → 需要**链接** libvpl/libmfx，产物会依赖运行库（DLL/SO）→ 默认关闭
+#   vaapi          开关 --enable-vaapi      需要链接 libva → 同上，默认关闭
+#
+# 因此默认只启用"仅头文件 + 运行期动态加载"的编码器，保证产物是**单个可执行文件**（组件包只发 bin/ffmpeg）。
+# 需要 QSV/VAAPI 时用 ENABLE_QSV=1 / ENABLE_VAAPI=1 显式开启（会带来运行库依赖，脚本会警告）。
+HW=()
+add_hw() {
+  for x in ${HW[@]+"${HW[@]}"}; do [ "$x" = "$1" ] && return; done   # 去重（此前 --enable-nvenc 会被加两次）
+  HW+=("$1")
+}
+have_pc() { pkg-config --exists "$1" 2>/dev/null; }
+have_hdr() { [ -d "/mingw64/include/$1" ] || [ -d "/usr/include/$1" ] || [ -d "/usr/local/include/$1" ]; }
+
 EXTRA=()
 if [ "$PLATFORM" = "macos" ]; then
-  # 官方源码自带 VideoToolbox/AudioToolbox 支持，无需任何外部库
-  EXTRA+=(--enable-videotoolbox --enable-audiotoolbox)
+  add_hw --enable-videotoolbox
+  add_hw --enable-audiotoolbox
 fi
 if [ "$PLATFORM" = "windows" ]; then
-  # 便携性：静态链接 exe，避免用户机器缺 DLL
+  # 便携性：静态链接 exe，避免用户机器缺 DLL（对"仅头文件"的 nvenc/amf 无副作用）
   EXTRA+=(--pkg-config-flags=--static --extra-ldexeflags=-static)
-  # 硬件编码：装了对应头文件才启用（MSYS2: mingw-w64-x86_64-ffnvcodec-headers / -onevpl / -amf-headers）
-  pkg-config --exists ffnvcodec 2>/dev/null && EXTRA+=(--enable-nvenc) || true
-  pkg-config --exists vpl 2>/dev/null && EXTRA+=(--enable-qsv) || true
-  if pkg-config --exists libamf 2>/dev/null || pkg-config --exists AMF 2>/dev/null; then EXTRA+=(--enable-amf); fi
-  [ -d /mingw64/include/ffnvcodec ] && EXTRA+=(--enable-nvenc) || true
 fi
-if [ "$PLATFORM" = "linux" ]; then
-  pkg-config --exists libvpl 2>/dev/null && EXTRA+=(--enable-qsv) || true
-  [ -d /usr/include/ffnvcodec ] || [ -d /usr/local/include/ffnvcodec ] && EXTRA+=(--enable-nvenc) || true
-  [ -d /usr/include/libva ] && EXTRA+=(--enable-vaapi) || true
+if [ "$PLATFORM" = "windows" ] || [ "$PLATFORM" = "linux" ]; then
+  if have_pc ffnvcodec || have_hdr ffnvcodec; then add_hw --enable-nvenc; fi
+fi
+if [ "$PLATFORM" = "windows" ]; then
+  if have_hdr AMF || have_hdr amf; then add_hw --enable-amf; fi
+fi
+if [ "${ENABLE_QSV:-0}" = "1" ]; then
+  if have_pc vpl || have_pc libvpl; then
+    add_hw --enable-libvpl
+    echo "  ⚠️ ENABLE_QSV=1：产物会依赖 oneVPL 运行库（Windows 需 libvpl-2.dll）→ 不再是单文件"
+  else
+    echo "  ⚠️ ENABLE_QSV=1 但找不到 oneVPL（pkg-config: vpl / libvpl）→ 跳过 QSV"
+  fi
+fi
+if [ "${ENABLE_VAAPI:-0}" = "1" ] && [ "$PLATFORM" = "linux" ]; then
+  if have_pc libva; then
+    add_hw --enable-vaapi
+    echo "  ⚠️ ENABLE_VAAPI=1：产物会依赖 libva → 不再是单文件"
+  else
+    echo "  ⚠️ ENABLE_VAAPI=1 但找不到 libva → 跳过 VAAPI"
+  fi
 fi
 
 FULL_LIBS=()
+FULL_LABEL=""
 if [ "${FULL:-0}" = "1" ]; then
   FULL_LIBS=(--enable-libmp3lame --enable-libopus --enable-libass --enable-libfreetype)
+  FULL_LABEL=" / FULL"
   echo "  ℹ️ FULL=1：额外链接 libmp3lame / libopus / libass / freetype（需对应开发包）"
 fi
 
-echo "[3/4] configure（LGPL${FULL:+ / FULL}）${EXTRA[*]:-}"
+echo "[3/4] configure（LGPL${FULL_LABEL}）"
+echo "  平台开关：${EXTRA[*]:-（无）}"
+echo "  硬件编码：${HW[*]:-（无——将只能 -c copy 直通）}"
+if [ ${#HW[@]} -eq 0 ]; then
+  echo "  ⚠️ 没有可用的硬件编码器：本构建无法转码（LGPL 构建没有 libx264）。"
+  echo "     常见原因：缺 ffnvcodec 头文件（NVENC）/ AMF 头文件（AMD）/ 非 macOS 平台。"
+fi
 # 说明：数组用 ${arr[@]+"${arr[@]}"} 展开 —— macOS 自带 bash 3.2 下，
 # `set -u` + 空数组的 "${arr[@]}" 会报 unbound variable（bash 4.4 才修）。
 # shellcheck disable=SC2086
@@ -196,7 +237,7 @@ echo "[3/4] configure（LGPL${FULL:+ / FULL}）${EXTRA[*]:-}"
   --disable-gpl --disable-nonfree \
   --disable-doc --disable-debug --disable-ffplay --disable-sdl2 \
   --enable-static --disable-shared \
-  ${EXTRA_CONFIGURE:-} ${EXTRA[@]+"${EXTRA[@]}"} ${FULL_LIBS[@]+"${FULL_LIBS[@]}"}
+  ${EXTRA_CONFIGURE:-} ${EXTRA[@]+"${EXTRA[@]}"} ${HW[@]+"${HW[@]}"} ${FULL_LIBS[@]+"${FULL_LIBS[@]}"}
 
 # ---------- 4) 编译 ----------
 JOBS="$( (nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4) )"
