@@ -1,0 +1,6 @@
+# 构建中间产物与本地临时文件（产物 zip 走 GitHub Release，不进仓库）
+.build/
+dist-plugins/
+node_modules/
+*.log
+.DS_Store

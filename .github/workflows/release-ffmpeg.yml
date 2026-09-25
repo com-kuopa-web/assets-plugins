@@ -1,0 +1,157 @@
+# 发布 FFmpeg 组件（各平台）到 GitHub Release，并自动更新 plugin-catalog.json
+#
+# 触发：推送 tag（如 ffmpeg-7.1.0）或手动运行（填版本号）
+# 产物：official.ffmpeg-<version>-<platform>-<arch>.zip + 更新后的清单
+#
+# 说明：
+# · 源码来自 **ffmpeg.org 官方发布包**（官方只提供源码；预编译链接都是第三方，多为 GPL 构建）
+#   → macOS/Linux 用 scripts/build-lgpl-ffmpeg.sh 自建（CI 约 10~25 分钟）；
+# · Windows 自建需要 MSYS2，这里走「自行准备 LGPL 产物」的变量 FFMPEG_WIN_LGPL_URL（仓库 Settings → Variables）；
+# · 打包一律加 --require-lgpl：任何 GPL/nonfree 构建都会让 CI 失败，防止把不合规二进制发出去。
+name: Release FFmpeg component
+
+on:
+  push:
+    tags: ['ffmpeg-*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'FFmpeg 版本（如 7.1.0）'
+        required: true
+        default: '7.1.5'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            platform: darwin
+            arch: arm64
+            mode: source
+          - os: macos-13
+            platform: darwin
+            arch: x64
+            mode: source
+          - os: ubuntu-22.04
+            platform: linux
+            arch: x64
+            mode: source
+          - os: windows-latest
+            platform: win32
+            arch: x64
+            mode: prebuilt
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 解析版本号
+        id: meta
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${GITHUB_REF_NAME#ffmpeg-}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+
+      # ---------- 取得一份 LGPL ffmpeg ----------
+      # 许可证原文：build-lgpl-ffmpeg.sh 会从 FFmpeg 源码树复制到 licenses/
+      - name: 依赖（macOS）
+        if: matrix.mode == 'source' && runner.os == 'macOS'
+        run: brew install nasm pkg-config lame opus libass freetype
+      - name: 依赖（Linux）
+        if: matrix.mode == 'source' && runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y nasm pkg-config libmp3lame-dev libopus-dev libass-dev libfreetype6-dev
+      - name: 自建 LGPL ffmpeg
+        if: matrix.mode == 'source'
+        shell: bash
+        run: bash scripts/build-lgpl-ffmpeg.sh "${{ steps.meta.outputs.version }}"
+      - name: 下载现成 LGPL 产物（Windows）
+        if: matrix.mode == 'prebuilt'
+        shell: bash
+        run: |
+          if [ -z "${{ vars.FFMPEG_WIN_LGPL_URL }}" ]; then
+            echo "::error::请在仓库 Variables 配置 FFMPEG_WIN_LGPL_URL（一份 LGPL 构建的 zip/7z 直链）"
+            exit 1
+          fi
+          mkdir -p .build && cd .build
+          curl -fL -o win.zip "${{ vars.FFMPEG_WIN_LGPL_URL }}"
+          unzip -oq win.zip
+          find . -name 'ffmpeg.exe' -print -quit > /tmp/winbin
+
+      # ---------- 打包（强制 LGPL） ----------
+      - name: 打包组件
+        shell: bash
+        run: |
+          VERSION="${{ steps.meta.outputs.version }}"
+          BIN="$PWD/.build/out/bin/ffmpeg"
+          if [ "${{ matrix.mode }}" = "prebuilt" ]; then BIN="$(cat /tmp/winbin)"; fi
+          node scripts/build-ffmpeg-plugin.mjs \
+            --bin "$BIN" \
+            --license licenses/COPYING.LGPLv2.1 \
+            --version "$VERSION" \
+            --out dist-plugins \
+            --require-lgpl
+          # 文件名带上平台/架构，供清单更新脚本自动识别
+          SRC="dist-plugins/official.ffmpeg-${VERSION}.zip"
+          DST="dist-plugins/official.ffmpeg-${VERSION}-${{ matrix.platform }}-${{ matrix.arch }}.zip"
+          mv "$SRC" "$DST"
+          ls -lh dist-plugins
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pkg-${{ matrix.platform }}-${{ matrix.arch }}
+          path: dist-plugins/*.zip
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - uses: actions/download-artifact@v4
+        with: { path: dist-plugins, merge-multiple: true }
+
+      - name: 解析版本号
+        id: meta
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+            echo "tag=ffmpeg-${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${GITHUB_REF_NAME#ffmpeg-}" >> "$GITHUB_OUTPUT"
+            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 创建 Release 并上传组件包
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: FFmpeg component ${{ steps.meta.outputs.version }}
+          files: dist-plugins/*.zip
+          body: |
+            FFmpeg ${{ steps.meta.outputs.version }}（LGPL 构建）组件包，供 AssetsHelper 设置 → FFmpeg 中下载安装。
+            每个包内含 `licenses/` 与 `THIRD-PARTY-NOTICES.md`（版本、configure 行、源码获取方式、替换方法）。
+
+      - name: 更新清单
+        run: |
+          node scripts/update-catalog.mjs \
+            --dir dist-plugins \
+            --catalog plugin-catalog.json \
+            --repo "${{ github.repository }}" \
+            --tag "${{ steps.meta.outputs.tag }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add plugin-catalog.json
+          git commit -m "chore(catalog): ffmpeg ${{ steps.meta.outputs.version }}" || echo "清单无变化"
+          git push
