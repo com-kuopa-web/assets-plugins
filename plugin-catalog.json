@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updatedAt": "2026-09-25T09:16:56.722Z",
+  "updatedAt": "2026-09-25T10:56:46.674Z",
   "plugins": [
     {
       "id": "official.ffmpeg",
@@ -10,8 +10,8 @@
       "license": "LGPL-2.1-or-later",
       "platform": "darwin",
       "arch": "arm64",
-      "size": 9971053,
-      "sha256": "60929c6098f62b7214391aa4a5652750a73d493f2f079b9a24294eb3fc86878c",
+      "size": 9971021,
+      "sha256": "38242e49fd0c69f0f58668460b580b6cecbeb204a974d2d5e0902a6b9afc1e08",
       "downloadUrl": "https://github.com/com-kuopa-web/assets-plugins/releases/download/ffmpeg-7.1.5/official.ffmpeg-7.1.5-darwin-arm64.zip",
       "mirrors": []
     },
@@ -24,7 +24,7 @@
       "platform": "darwin",
       "arch": "x64",
       "size": 10911663,
-      "sha256": "e377fc12ad2ef0b37da48910fdb1017c8bea4d6c95bd50dc4e83d8a322853355",
+      "sha256": "28b4904842584be88e222af6395338213a2cae374ec601abf42af73437c21096",
       "downloadUrl": "https://github.com/com-kuopa-web/assets-plugins/releases/download/ffmpeg-7.1.5/official.ffmpeg-7.1.5-darwin-x64.zip",
       "mirrors": []
     },
@@ -37,7 +37,7 @@
       "platform": "linux",
       "arch": "x64",
       "size": 10052671,
-      "sha256": "a0a9ca7f4f7d9925e0d4c3d14e8b57c587ed40b02cf171eadabb905e34c2bfba",
+      "sha256": "1335d3018043a17b157e1694e94c05a7c19d7badf968b26b837c52133d9d6b4a",
       "downloadUrl": "https://github.com/com-kuopa-web/assets-plugins/releases/download/ffmpeg-7.1.5/official.ffmpeg-7.1.5-linux-x64.zip",
       "mirrors": []
     },
@@ -49,8 +49,8 @@
       "license": "LGPL-2.1-or-later",
       "platform": "win32",
       "arch": "x64",
-      "size": 11274873,
-      "sha256": "889f094c208210056cb3bc86d473310fc2d6a61adb35dace3aed3785e0c6be29",
+      "size": 11274874,
+      "sha256": "28fc316779cf0d0c4b464d5dc1e866288b6813ec6ee5f4e5fc6486faaada98f3",
       "downloadUrl": "https://github.com/com-kuopa-web/assets-plugins/releases/download/ffmpeg-7.1.5/official.ffmpeg-7.1.5-win32-x64.zip",
       "mirrors": []
     }
