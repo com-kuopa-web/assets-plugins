@@ -25,4 +25,4 @@
 | `THIRD-PARTY-NOTICES.md`（打包时生成） | 版本 / configure 行 / 源码获取方式 / 如何替换 |
 | `build-info.json`（打包时生成） | 上述事实的**机器可验证证据**（含源码包 sha256） |
 
-义务清单与背景：`web/notes/许可证/` 与 `AssetsHelper/docs/notes/媒体播放/FFmpeg接入与许可证.md`。
+义务清单与背景：`web/notes/许可证/` 与 `notes/本体/媒体播放/FFmpeg接入与许可证.md`。

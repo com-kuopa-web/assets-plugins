@@ -21,7 +21,7 @@
  * 许可证红线（脚本会强制）：
  *   · 含 `--enable-nonfree` 的构建 **不可再分发** → 直接拒绝；
  *   · GPL 构建允许但要提醒"需提供对应源码"；
- *   · 推荐用 **LGPL 构建**（见 docs/notes/媒体播放/FFmpeg接入与许可证.md）。
+ *   · 推荐用 **LGPL 构建**（见 notes/本体/媒体播放/FFmpeg接入与许可证.md）。
  */
 
 import { execFileSync } from 'node:child_process'
@@ -112,7 +112,7 @@ if (license === 'nonfree') {
   console.error(
     '\n✗ 这份构建含 `--enable-nonfree`，按 FFmpeg 官方说明**不可再分发**，不能做成分发包。' +
       '\n  请改用 LGPL 构建（或用户在设置里自行指定路径，由用户自担）。' +
-      '\n  参考：docs/notes/媒体播放/FFmpeg接入与许可证.md',
+      '\n  参考：notes/本体/媒体播放/FFmpeg接入与许可证.md',
   )
   process.exit(1)
 }
