@@ -1,11 +1,11 @@
 # licenses/
 
 许可证原文。**构建脚本会自动从 FFmpeg 源码树把这些文件复制过来**（`build-lgpl-ffmpeg.sh`），
-再由 `build-ffmpeg-plugin.mjs --license …` 决定哪些进组件包。
+再由 `build-ffmpeg-plugin.mjs --license …` 决定哪些进插件包。
 
-## 哪份适用于我们的组件？
+## 哪份适用于我们的插件？
 
-| 文件 | 是否适用本组件 | 说明 |
+| 文件 | 是否适用本插件 | 说明 |
 |---|---|---|
 | `COPYING.LGPLv2.1` | ✅ **适用（治理许可证）** | 我们的 configure 是 `--disable-gpl --disable-nonfree`，产物为 **LGPL-2.1-or-later** |
 | `LICENSE.md` | ✅ 适用（**范围说明**） | FFmpeg 官方文档：哪些文件 LGPL、哪些是"可选 GPL 部分"、启用 `--enable-gpl` 后整体变 GPL |
@@ -13,10 +13,10 @@
 | `COPYING.GPLv3` | ❌ **不适用** | GPL 部分未启用；且 FFmpeg 的 GPL 部分用的是 GPLv2+（其 `LICENSE.md` 引用 `COPYING.GPLv2`） |
 
 > **注意**：多放一份许可文本本身不违法，但会让人误以为"这个二进制是 GPL"。
-> 所以**组件包只打 LGPLv2.1 + LICENSE.md**（见 `scripts/build-local.sh`），
+> 所以**插件包只打 LGPLv2.1 + LICENSE.md**（见 `scripts/build-local.sh`），
 > 仓库里保留全部原文只是"源码树原料"，不是"声明"。
 
-## 合规三件套（随组件分发）
+## 合规三件套（随插件分发）
 
 | 材料 | 作用 |
 |---|---|

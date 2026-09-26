@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 // ⚠️ 本文件是从主仓库 `AssetsHelper/scripts/build-ffmpeg-plugin.mjs` 复制来的（vendor）。要改就改主副本再复制回来，避免两边漂移。
 /**
- * 构建 `official.ffmpeg` 组件包（F2）
+ * 构建 `official.ffmpeg` 插件包（F2）
  *
  * 产出：
  *   <out>/official.ffmpeg-<version>/
  *     ├── manifest.json            插件清单（provides: capability=ffmpeg）
  *     ├── bin/ffmpeg               可执行文件
- *     ├── licenses/…               许可证原文（必须随组件分发）
+ *     ├── licenses/…               许可证原文（必须随插件分发）
  *     ├── THIRD-PARTY-NOTICES.md   来源 / 源码获取方式 / 如何替换
  *     └── build-info.json          configure 行 + 版本 + sha256
  *   <out>/official.ffmpeg-<version>.zip        （有 zip 命令时）
@@ -38,7 +38,7 @@ function parseArgs(argv) {
     out: 'dist-plugins',
     version: null,
     id: 'official.ffmpeg',
-    name: 'FFmpeg 组件（第三方）',
+    name: 'FFmpeg 插件（第三方）',
     author: 'FFmpeg project',
     sourceUrl: null,
     sourceSha256: null,
@@ -130,7 +130,7 @@ if (args.requireLgpl && license !== 'LGPL') {
 }
 if (license === 'GPL') {
   console.warn(
-    '\n⚠️ 这是 GPL 构建：可以分发，但必须随组件提供许可证原文，并提供/承诺提供**对应源码**。' +
+    '\n⚠️ 这是 GPL 构建：可以分发，但必须随插件提供许可证原文，并提供/承诺提供**对应源码**。' +
       '\n   想减义务请换 LGPL 构建（代价：没有 libx264 软编，只能硬件编码）。',
   )
 }
@@ -189,7 +189,7 @@ writeFileSync(
       name: args.name,
       version,
       apiVersion: 1,
-      description: `FFmpeg ${version}（${license} 构建）—— 为音视频模块提供转码 / 截帧 / 探测能力`,
+      description: `FFmpeg ${version}（${license} 构建）—— 为音视频插件提供转码 / 截帧 / 探测能力`,
       author: args.author,
       official: false,
       kind: 'capability-provider',
@@ -226,11 +226,11 @@ writeFileSync(
 
 writeFileSync(
   join(pkgDir, 'THIRD-PARTY-NOTICES.md'),
-  `# 第三方组件声明：FFmpeg ${version}
+  `# 第三方插件声明：FFmpeg ${version}
 
 | 项 | 值 |
 |---|---|
-| 组件 | FFmpeg（\`ffmpeg\` 可执行文件） |
+| 插件 | FFmpeg（\`ffmpeg\` 可执行文件） |
 | 版本 | ${version} |
 | 构建许可证 | **${license}** |
 | 许可证治理 | ${license === 'LGPL' ? 'LGPL-2.1-or-later' : license} |
@@ -242,7 +242,7 @@ writeFileSync(
 
 见 \`licenses/\` 目录（${licenseFiles.map((l) => l.name).join('、') || '⚠️ 缺失，见 licenses/MISSING.txt'}）。
 
-**适用范围**：本组件按 **${license}** 分发，判定依据是 \`build-info.json\` 里记录的 configure 行
+**适用范围**：本插件按 **${license}** 分发，判定依据是 \`build-info.json\` 里记录的 configure 行
 （含 \`--disable-gpl --disable-nonfree\`）。FFmpeg 中受 GPL 覆盖的**可选部分**（libpostproc、
 部分 x86 汇编优化与滤镜等）在本构建中**未启用**；若 \`licenses/\` 内另含其它许可文本（如 GPLv3），
 那是 FFmpeg 源码树随附的原文，**不适用于本二进制**（FFmpeg 官方的许可证分布说明见其 \`LICENSE.md\`）。
@@ -256,21 +256,21 @@ ${args.sourceSha256 ? `- 源码包 SHA-256：\`${args.sourceSha256}\`\n` : ''}- 
 ${configuration || '(未记录)'}
 \`\`\`
 
-> 若本组件由第三方预编译产物构建，请一并说明其构建脚本来源。
+> 若本插件由第三方预编译产物构建，请一并说明其构建脚本来源。
 
-## 如何替换本组件
+## 如何替换本插件
 
-本组件是**独立可执行文件**，用户可随时替换：
+本插件是**独立可执行文件**，用户可随时替换：
 
 1. 打开「设置 → 视频 → FFmpeg」；
 2. 点「自动扫描本机」选择系统里已有的 FFmpeg，或「手动选择…」指定任意一份；
-3. 也可以「导入组件包…」重新导入另一份构建。
+3. 也可以「导入插件包…」重新导入另一份构建。
 
 替换后立即生效（无需重启）。
 
 ## 说明
 
-- 本组件**不随主程序安装包分发**，由用户按需获取；
+- 本插件**不随主程序安装包分发**，由用户按需获取；
 - 转码优先使用硬件编码（VideoToolbox / NVENC / QSV / AMF）；
   ${
     license === 'LGPL'
@@ -281,7 +281,7 @@ ${configuration || '(未记录)'}
   'utf8',
 )
 
-console.log(`✅ 组件包目录：${pkgDir}`)
+console.log(`✅ 插件包目录：${pkgDir}`)
 
 /* ---------------- 打包 zip + 校验和 + 清单片段 ---------------- */
 const zipName = `${args.id}-${version}.zip`
@@ -328,4 +328,4 @@ if (zipped) {
   console.log(`   清单片段：${join(outDir, 'catalog-entry.json')}（记得把 downloadUrl 换成真实地址）`)
 }
 
-console.log('\n下一步：用户在「设置 → 视频 → FFmpeg → 导入组件包…」选中解压后的目录即可启用。')
+console.log('\n下一步：用户在「设置 → 视频 → FFmpeg → 导入插件包…」选中解压后的目录即可启用。')

@@ -1,0 +1,131 @@
+# 发布官方插件到分发通道（Release 附件 + 更新 plugin-catalog.json）
+#
+# 用法：Actions → Publish official plugins → Run workflow
+#   · plugins：all | core | optional | official.model | official.image,official.audio
+#   · tag：如 plugins-1.0.0（清单里的 downloadUrl 指向它）
+#   · dry_run：默认 **true**（只打印要传什么、清单怎么变）—— 先看一遍再真发
+#
+# ── 为什么在这个仓库跑 ──────────────────────────────────────────────────────
+# Release 附件与清单都住在 `assets-plugins`（**公开**仓，用户的应用才不需要凭据就能下载）。
+# 默认的 `GITHUB_TOKEN` 只能写**本仓库**，所以发布动作放这里最省事：
+#   · 建 Release / 上传附件 / 提交清单 → `permissions: contents: write` + 默认 token ✓
+#   · 读两个**私有**源码仓（AssetsHelper + assets-plugins-official）→ 需要 `CI_SSH_KEY`
+#   （⚠️ 这个 secret 要加在**本仓库**的 Actions secrets 里，与 AssetsHelper 那个不共用）
+#
+# ── 与本地脚本的关系 ────────────────────────────────────────────────────────
+# 本 workflow 只负责"检出源码 → 构建 → 调脚本"。真正的逻辑在
+# `scripts/publish-plugins.mjs`（可本地跑：`node scripts/publish-plugins.mjs --help`），
+# 所以出问题时可以在本地复现同一条命令，不用靠 CI 日志猜。
+#
+# action 版本策略：与同目录 release-ffmpeg.yml 同一套（取最低的已用 node24 的 major）。
+name: Publish official plugins
+
+on:
+  workflow_dispatch:
+    inputs:
+      plugins:
+        description: '发什么：all | core | optional | <id>[,<id>]（core=图片/音频/视频，optional=模型；all 不含随包预置的 official.filelist）'
+        required: true
+        default: 'core'
+      tag:
+        description: 'Release tag（如 plugins-1.0.0）'
+        required: true
+      host_ref:
+        description: 'AssetsHelper 的 ref（默认 main）'
+        required: false
+        default: 'main'
+      plugins_ref:
+        description: 'assets-plugins-official 的 ref（默认 main）'
+        required: false
+        default: 'main'
+      dry_run:
+        description: '只打印、不发布（先跑一次看清单会怎么变）'
+        type: boolean
+        default: true
+      clobber:
+        description: '覆盖 Release 上已有的同名附件'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-plugins-${{ inputs.tag }}
+  cancel-in-progress: false
+
+env:
+  HOST_REPO: com-kuopa-web/AssetsHelper
+  PLUGINS_REPO: com-kuopa-web/assets-plugins-official
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with: { node-version: '22' }
+
+      - name: 配置 SSH（读两个私有源码仓）
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "${{ secrets.CI_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -t ed25519,rsa github.com >> ~/.ssh/known_hosts 2>/dev/null
+          ssh -T -o BatchMode=yes git@github.com || true
+
+      # 同级目录布局：本体的 `plugins-dir.mjs` 默认就在 `<本体>/../assets-plugins-official` 找插件源码
+      - name: 检出本体与插件仓库（按 ref）
+        run: |
+          fetch_repo() { # $1=owner/name  $2=目标目录  $3=ref
+            git init -q "$2"
+            git -C "$2" remote add origin "git@github.com:$1.git"
+            git -C "$2" fetch -q --depth 1 origin "$3"
+            git -C "$2" checkout -q FETCH_HEAD
+            echo "  $2 → $(git -C "$2" log --oneline -1)"
+          }
+          fetch_repo "$HOST_REPO" ../AssetsHelper "${{ inputs.host_ref }}"
+          fetch_repo "$PLUGINS_REPO" ../assets-plugins-official "${{ inputs.plugins_ref }}"
+
+      - name: 安装本体依赖（含 @assets/ui 的 git 依赖，走同一把 key）
+        run: cd ../AssetsHelper && yarn install --frozen-lockfile
+
+      - name: 构建插件产物
+        run: |
+          cd ../AssetsHelper
+          yarn test:plugin:official-ts   # 先 typecheck（防"构建能过但类型已经坏了"）
+          yarn plugin:build
+
+      # 选择器映射：all → --all；core/optional → --group；其余当成 id 列表
+      - name: 解析选择器
+        id: sel
+        shell: bash
+        run: |
+          case "${{ inputs.plugins }}" in
+            all)      echo "args=--all" >> "$GITHUB_OUTPUT" ;;
+            core)     echo "args=--group core" >> "$GITHUB_OUTPUT" ;;
+            optional) echo "args=--group optional" >> "$GITHUB_OUTPUT" ;;
+            *)        echo "args=--only ${{ inputs.plugins }}" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      - name: 发布（脚本：传附件 + 更新清单）
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node scripts/publish-plugins.mjs \
+            --dir ../AssetsHelper/dist-plugins \
+            ${{ steps.sel.outputs.args }} \
+            --tag "${{ inputs.tag }}" \
+            ${{ inputs.dry_run && '--dry-run' || '' }} \
+            ${{ inputs.clobber && '--clobber' || '' }}
+
+      # dry_run 时不提交；真发布才回写清单（与 ffmpeg 的 release workflow 同一手法）
+      - name: 提交清单
+        if: ${{ !inputs.dry_run }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add plugin-catalog.json
+          git commit -m "chore(catalog): 发布 ${{ inputs.plugins }}（${{ inputs.tag }}）" || echo "清单无变化"
+          git push

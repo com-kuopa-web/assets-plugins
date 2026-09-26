@@ -1,11 +1,11 @@
-# assets-plugins —— AssetsHelper 官方资产组件（插件）分发仓库
+# assets-plugins —— AssetsHelper 官方资产插件（插件）分发仓库
 
-本仓库是 **公开的组件分发源**：App 在「设置 → 播放 → FFmpeg → 组件源」里指向本仓库的
-`plugin-catalog.json`（留空即用内置官方源），即可按需下载 / 校验 / 安装组件。
+本仓库是 **公开的插件分发源**：App 在「设置 → 播放 → FFmpeg → 插件源」里指向本仓库的
+`plugin-catalog.json`（留空即用内置官方源），即可按需下载 / 校验 / 安装插件。
 
 > 仓库只做两件事：
-> 1. **放清单** `plugin-catalog.json`（几 KB：有哪些组件、在哪下、sha256、镜像）；
-> 2. **放 CI 与构建脚本**（从官方源码自建 FFmpeg → 打包成合规组件包 → 作为 **Release 资源**上传）。
+> 1. **放清单** `plugin-catalog.json`（几 KB：有哪些插件、在哪下、sha256、镜像）；
+> 2. **放 CI 与构建脚本**（从官方源码自建 FFmpeg → 打包成合规插件包 → 作为 **Release 资源**上传）。
 >
 > ⚠️ **二进制不进仓库**：40~80MB 的文件会让 clone 变慢、仓库膨胀（GitHub 单仓库建议 ≤2GB）；
 > Release 资源有独立 CDN、单文件可到 2GB。**仓库管清单，Release 管大文件。**
@@ -49,15 +49,15 @@ bash scripts/build-local.sh
 ```
 
 它做三件事：**① 下载官方源码 →（PGP 验签 + 记录 sha256）→ 自建 LGPL ffmpeg；
-② 打包成组件包；③ 打印"怎么本地验证 / 怎么发布"**。
+② 打包成插件包；③ 打印"怎么本地验证 / 怎么发布"**。
 
 - 耗时：首次约 **10~25 分钟**（编译为主）；第二次复用 `.build/` 会快很多。
 - 产物：
   ```
   .build/out/bin/ffmpeg[.exe]                                  # 二进制
   .build/SOURCE-SHA256.txt                                     # 源码包校验和（合规记录）
-  licenses/COPYING.LGPLv2.1                                    # 从官方源码树复制（随组件包分发）
-  dist-plugins/official.ffmpeg-<ver>-<platform>-<arch>.zip     # ★ 组件包
+  licenses/COPYING.LGPLv2.1                                    # 从官方源码树复制（随插件包分发）
+  dist-plugins/official.ffmpeg-<ver>-<platform>-<arch>.zip     # ★ 插件包
   dist-plugins/official.ffmpeg-<ver>/                          #   解压形态（含 manifest/licenses/NOTICES/build-info）
   ```
 
@@ -89,16 +89,16 @@ node scripts/update-catalog.mjs --dir dist-plugins --catalog plugin-catalog.json
 
 | 方式 | 做法 |
 |---|---|
-| **装进 App** | 打开 AssetsHelper → 设置 → 播放 → FFmpeg → 「导入组件包…」→ 选中**解压后的目录** `dist-plugins/official.ffmpeg-<ver>`（也可以选二进制文件本身） |
+| **装进 App** | 打开 AssetsHelper → 设置 → 播放 → FFmpeg → 「导入插件包…」→ 选中**解压后的目录** `dist-plugins/official.ffmpeg-<ver>`（也可以选二进制文件本身） |
 | 手动放 | 把 `official.ffmpeg-<ver>/` 拷到 `{userData}/plugins/official.ffmpeg/<ver>/`（macOS: `~/Library/Application Support/AssetsHelper/plugins/`；Windows: `%APPDATA%\AssetsHelper\plugins\`） |
 | 只验二进制 | `.build/out/bin/ffmpeg -hide_banner -version` / `-encoders | grep -E "libx264|h264_videotoolbox|h264_nvenc"` |
 
-装好后：设置里的 FFmpeg 行应显示「来源：组件包 · 版本 · 许可证 · 编码器」；视频转码/截帧即可用。
+装好后：设置里的 FFmpeg 行应显示「来源：插件包 · 版本 · 许可证 · 编码器」；视频转码/截帧即可用。
 
 ### 4. 发布（CI 出全平台包）
 
 ```bash
-git add -A && git commit -m "feat: ffmpeg 组件构建" && git push
+git add -A && git commit -m "feat: ffmpeg 插件构建" && git push
 git tag ffmpeg-7.1.5 && git push origin ffmpeg-7.1.5
 ```
 
@@ -137,15 +137,64 @@ CI（`.github/workflows/release-ffmpeg.yml`）会在 4 个 runner 上各自**自
 assets-plugins/
 ├── plugin-catalog.json                     # ★ App 拉取的清单（CI 自动更新）
 ├── .github/workflows/release-ffmpeg.yml    # 打 tag / 手动触发即发布（三平台自建）
+├── .github/workflows/publish-plugins.yml   # ★ 发布**官方界面插件**（按 id / 组 / 全部，见 §二·2）
 ├── scripts/
 │   ├── build-lgpl-ffmpeg.sh                # 官方源码 → 验签/记 sha256 → 自建 LGPL（macOS/Linux/MSYS2 通用）
 │   ├── build-local.sh                      # ★ 本机一条命令：构建 + 打包 + 打印验证/发布方式
-│   ├── build-ffmpeg-plugin.mjs             # 组件打包器（vendor：以 AssetsHelper/scripts/ 为主副本，改那边再复制过来）
+│   ├── build-ffmpeg-plugin.mjs             # 插件打包器（vendor：以 AssetsHelper/scripts/ 为主副本，改那边再复制过来）
+│   ├── publish-plugins.mjs                 # ★ 发布官方界面插件：传 Release 附件 + 幂等合并清单（不依赖 gh）
 │   ├── check-shell-expansions.mjs          # shell 体检：禁止 "$VAR 紧跟中文"（UTF-8 locale 坑）
 │   ├── check-node-paths.mjs                # Node 体检：禁止 new URL(import.meta.url).pathname（Windows 双盘符）
 │   └── update-catalog.mjs                  # 用产物自动更新清单（sha256/size/downloadUrl）
-└── licenses/                               # 许可证原文（构建时从官方源码树复制，随组件包分发）
+└── licenses/                               # 许可证原文（构建时从官方源码树复制，随插件包分发）
 ```
+
+### 官方界面插件的发布（`publish-plugins`）
+
+> ⚠️ **状态：备用（2026-09-26 起）**。官方 4 个界面插件（图片/音频/视频/模型）已拍板改为
+> **全部随本体打包、首启只问启用位**（不下载、不依赖网络），见
+> [`AssetsHelper/docs/prd/插件化架构/插件外置与预置分发方案.md`](../AssetsHelper/docs/prd/插件化架构/插件外置与预置分发方案.md) §7.12。
+> 本节的通道**保留可用**，但**当前没有消费者** —— 真正在用的只有 **FFmpeg 二进制插件**那条线（§一）。
+> 只有要"增量更新/灰度"或"某插件体积大到必须拆出去"时才启用它。
+
+界面插件（图片/音频/视频/模型）与 ffmpeg 那种二进制插件**走同一条分发通道**：
+zip 作为 **Release 附件**、清单条目写进 `plugin-catalog.json`。区别只在"内容物"——
+界面插件包里是**明文 JS 产物** + `manifest.json` + `build.json`（不是二进制、也不是混淆脚本）。
+
+**在 Actions 里发**（推荐）：`Publish official plugins` → 选 `plugins`（`all` / `core` / `optional` / `<id>[,<id>]`）
+与 `tag`，**先留 `dry_run=true` 跑一次**看清单会怎么变，再关掉它真发。
+
+**在本地发**（等价，便于排查）：
+
+```bash
+# 1) 先在本体构建产物
+cd ../AssetsHelper && yarn plugin:build
+
+# 2) 看计划（不联网、不写文件）
+cd ../assets-plugins
+node scripts/publish-plugins.mjs --dir ../AssetsHelper/dist-plugins --only official.model --tag plugins-1.0.0 --dry-run
+
+# 3) 真发（上传需要 GITHUB_TOKEN/GH_TOKEN，contents: write）
+GITHUB_TOKEN=… node scripts/publish-plugins.mjs --dir ../AssetsHelper/dist-plugins --group core --tag plugins-1.0.0
+#    只想更新清单、附件已手动传过：加 --no-upload
+#    清单改完自己提交：脚本会打印 git 命令（加 --commit 让它直接提交）
+```
+
+| 选择器 | 含义 |
+|---|---|
+| `--only official.model` / `--only a,b` | 一个 / 指定多个 |
+| `--group core` | 图片 + 音频 + 视频（**多数人够用**那三件套） |
+| `--group optional` | 模型（体积大，按需下载） |
+| `--all` | 构建产物里发现到的**可发布**插件（**排除宿主自有的 `official.filelist`** —— 它随包预置、不可卸载，进清单只会造成"为什么装不了"的困惑；真要发它用 `--only official.filelist`） |
+
+规则（防手滑）：**必须显式给一个选择器**；未知 id / 未知组 / **组里有成员没构建出来** → 直接报错；
+清单合并是**幂等**的（同 `id@version` 替换、其它条目原样保留，比如 ffmpeg 那 4 条）；
+`--dry-run` 不联网不写文件；不带 `--tag` 不允许真发（清单里的 `downloadUrl` 必须真实可下载）；
+`--all` 会**排除宿主自有插件**（`official.filelist`，见 AssetsHelper 的 `src/shared/plugin-policy.ts`）并在输出里说明。
+
+> ⚠️ **发布需要一个 secret**：workflow 要读两个**私有**源码仓（`AssetsHelper`、`assets-plugins-official`）
+> → 在**本仓库**的 Actions secrets 里加 `CI_SSH_KEY`（一把只读、能读这两个仓的 key）。
+> 建 Release 与提交清单用默认 `GITHUB_TOKEN` 即可（`permissions: contents: write`），不需要额外 PAT。
 
 ## 三、为什么"从源码自建"
 
@@ -165,6 +214,6 @@ ffmpeg.org 官方下载页写明：**“FFmpeg only provides source code.”**
 
 - 本仓库的**脚本与清单**：随主项目授权；
 - Release 中的 **FFmpeg 二进制**：由 FFmpeg 项目提供，按对应构建的许可证（默认 **LGPL-2.1-or-later**）分发；
-  每个组件包内含 `licenses/`（来自官方源码树）与 `THIRD-PARTY-NOTICES.md`
+  每个插件包内含 `licenses/`（来自官方源码树）与 `THIRD-PARTY-NOTICES.md`
   （版本、configure 行、源码获取方式、如何替换）。
 - 源码获取：`https://ffmpeg.org/releases/ffmpeg-<version>.tar.xz`。

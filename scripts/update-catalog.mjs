@@ -41,7 +41,7 @@ for (const file of readdirSync(dir).filter((f) => f.endsWith('.zip'))) {
   const sha256 = createHash('sha256').update(buf).digest('hex')
   const entry = {
     id,
-    name: id === 'official.ffmpeg' ? 'FFmpeg 组件（第三方）' : id,
+    name: id === 'official.ffmpeg' ? 'FFmpeg 插件（第三方）' : id,
     version,
     description: id === 'official.ffmpeg' ? `FFmpeg ${version}（LGPL 构建）—— 转码 / 截帧 / 探测` : undefined,
     license,

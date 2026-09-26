@@ -4,7 +4,7 @@
   "plugins": [
     {
       "id": "official.ffmpeg",
-      "name": "FFmpeg 组件（第三方）",
+      "name": "FFmpeg 插件（第三方）",
       "version": "7.1.5",
       "description": "FFmpeg 7.1.5（LGPL 构建）—— 转码 / 截帧 / 探测",
       "license": "LGPL-2.1-or-later",
@@ -17,7 +17,7 @@
     },
     {
       "id": "official.ffmpeg",
-      "name": "FFmpeg 组件（第三方）",
+      "name": "FFmpeg 插件（第三方）",
       "version": "7.1.5",
       "description": "FFmpeg 7.1.5（LGPL 构建）—— 转码 / 截帧 / 探测",
       "license": "LGPL-2.1-or-later",
@@ -30,7 +30,7 @@
     },
     {
       "id": "official.ffmpeg",
-      "name": "FFmpeg 组件（第三方）",
+      "name": "FFmpeg 插件（第三方）",
       "version": "7.1.5",
       "description": "FFmpeg 7.1.5（LGPL 构建）—— 转码 / 截帧 / 探测",
       "license": "LGPL-2.1-or-later",
@@ -43,7 +43,7 @@
     },
     {
       "id": "official.ffmpeg",
-      "name": "FFmpeg 组件（第三方）",
+      "name": "FFmpeg 插件（第三方）",
       "version": "7.1.5",
       "description": "FFmpeg 7.1.5（LGPL 构建）—— 转码 / 截帧 / 探测",
       "license": "LGPL-2.1-or-later",
